@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/* 1. Deklarasi Tema untuk Tailwind v4 */
+@theme {
+  /* Colors */
+  --color-ink: #1B1F3B;
+  --color-ink-light: #2A2F55;
+  --color-ink-lighter: #3B4170;
+  --color-ink-50: #EEEEF4;
+
+  --color-paper: #FAFAF7;
+  --color-paper-dim: #F1EFE8;
+
+  --color-highlight: #FFC640;
+  --color-highlight-hover: #F2B100;
+  --color-highlight-soft: #FFF3D6;
+
+  --color-stamp: #2F6F5E;
+  --color-stamp-soft: #E3EFEA;
+
+  --color-rubric: #C1432F;
+  --color-rubric-soft: #FBE7E2;
+
+  /* Fonts */
+  --font-display: "Lora", serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(27, 31, 59, 0.04), 0 4px 16px rgba(27, 31, 59, 0.06);
+}
+
+/* 2. Base Layer */
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+/* 3. Components Layer */
+@layer components {
+
+  /* Signature element: a highlighter-pen mark behind a word/phrase */
+  .mark-highlight {
+    background-image: linear-gradient(104deg, transparent 0%, transparent 4%, var(--color-highlight) 4%, var(--color-highlight) 92%, transparent 92%, transparent 100%);
+    padding: 0 0.15em;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-ink-light disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-highlight px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-highlight-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-ink/20 hover:bg-paper-dim disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-rubric px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rubric/90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/35 outline-none transition focus:border-ink/40 focus:ring-2 focus:ring-highlight/40;
+  }
+
+  .card {
+    @apply rounded-2xl border border-ink/8 bg-white shadow-card;
+  }
+}
+
+/* 4. Utilities Layer: Slim scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(27, 31, 59, 0.18);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(27, 31, 59, 0.3);
+}
