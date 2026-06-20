@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 
 from app.core.config import settings
 from app.db.database import init_db
-from app.api import auth, documents
+from app.api import auth, documents, admin
 
 # Logging configuration
 logging.basicConfig(
@@ -110,6 +110,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
+app.include_router(admin.router,     prefix="/api/v1")
 
 
 # ─────────────────────────────────────────────

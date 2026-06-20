@@ -60,7 +60,10 @@ class AnalysisType(str, enum.Enum):
 # ─────────────────────────────────────────────
 # User Table
 # ─────────────────────────────────────────────
-
+class UserRole(str, enum.Enum):
+    USER  = "user"
+    ADMIN = "admin"
+    
 class User(Base):
     __tablename__ = "users"
 
@@ -72,6 +75,9 @@ class User(Base):
     plan: Mapped[str] = mapped_column(String(20), default="free", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    role: Mapped[str] = mapped_column(
+        String(20), default=UserRole.USER, nullable=False
+    )
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
@@ -89,8 +95,6 @@ class User(Base):
 
     def __repr__(self):
         return f"<User id={self.id} email={self.email} plan={self.plan}>"
-
-
 # ─────────────────────────────────────────────
 # Quota Table
 # ─────────────────────────────────────────────

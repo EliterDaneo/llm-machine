@@ -129,6 +129,7 @@ def user_to_dict(user: User, quota: Optional[Quota] = None) -> dict:
         "plan": getattr(user.plan, "value", user.plan),
         "is_active": user.is_active,
         "is_verified": user.is_verified,
+        "role": getattr(user.role, "value", user.role),
         "avatar_url": user.avatar_url,
         "created_at": user.created_at.isoformat(),
         "last_login": user.last_login.isoformat() if user.last_login else None,

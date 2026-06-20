@@ -98,3 +98,21 @@ async def get_current_user(
 async def get_current_active_user(current_user=Depends(get_current_user)):
     """Alias dependency for cleaner endpoint signatures."""
     return current_user
+
+async def require_admin(
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Dependency: hanya lolos kalau role user == 'admin'.
+    Gunakan sebagai Depends() di endpoint admin.
+ 
+    Contoh pemakaian:
+        @router.get("/admin/users")
+        async def list_users(admin=Depends(require_admin), ...):
+    """
+    if getattr(current_user, "role", "user") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak. Hanya admin yang diizinkan.",
+        )
+    return current_user

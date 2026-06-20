@@ -4,6 +4,7 @@ Documents API Endpoints — MySQL compatible, UUID primary keys
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, and_
@@ -14,8 +15,11 @@ from app.db.database import get_db
 from app.db.models import User, Quota, Document, AnalysisResult, ChatHistory
 from app.core.security import get_current_active_user
 from app.core.config import settings
-from app.services.pdf_extractor import pdf_extractor
+# from app.services.pdf_extractor import pdf_extractor
+from app.services.document_extractor import document_extractor, SUPPORTED_EXTENSIONS
 from app.services.ai_orchestrator import ai_orchestrator, AnalysisMode
+
+TOKEN_COST_PER_ANALYSIS = 50000
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -65,30 +69,91 @@ async def get_user_quota(user: User, db: AsyncSession) -> Quota:
 
 
 async def check_and_consume_quota(user: User, quota: Quota, db: AsyncSession):
+    """
+    Logika quota baru (dua lapis):
+ 
+    Lapis 1 — Cek daily_analysis (hitungan per analisis):
+      • Kalau daily_used < daily_limit  → lanjut normal, tambah daily_used + 1
+      • Kalau daily_used >= daily_limit → masuk mode token-budget (lapis 2)
+ 
+    Lapis 2 — Cek token budget (total_tokens_used vs token_daily_limit):
+      • Kalau sisa token >= TOKEN_COST_PER_ANALYSIS → izinkan, TIDAK tambah daily_used
+        (supaya counter analisis tidak overflow — ini sudah "extra" dari token)
+      • Kalau token juga habis → 429 dengan pesan yang menjelaskan kedua limit habis
+ 
+    Reset harian: kalau sudah hari baru, reset daily_used + daily_reset_at dulu.
+    """
+    from datetime import datetime, timezone
+    from fastapi import HTTPException, status
+ 
     now = datetime.now(timezone.utc)
+ 
+    # --- Reset harian kalau sudah hari baru ---
     reset = quota.daily_reset_at
     if reset.tzinfo is None:
         reset = reset.replace(tzinfo=timezone.utc)
     if reset.date() < now.date():
         quota.daily_used = 0
         quota.daily_reset_at = now
-
-    if quota.daily_used >= quota.daily_limit:
-        upgrade = {
-            "free": "upgrade ke Pro (50/hari)",
-            "pro": "upgrade ke Enterprise (500/hari)",
-            "enterprise": "hubungi support",
+ 
+    upgrade_hint = {
+        "free":       "upgrade ke Pro (50 analisis/hari)",
+        "pro":        "upgrade ke Enterprise (500 analisis/hari)",
+        "enterprise": "hubungi support untuk menaikkan limit",
+    }
+ 
+    # --- Lapis 1: cek limit analisis ---
+    if quota.daily_used < quota.daily_limit:
+        # Normal: masih ada jatah analisis
+        quota.daily_used    += 1
+        quota.total_analyses += 1
+        await db.commit()
+        return  # ✅ lanjut ke proses analisis
+ 
+    # --- Lapis 2: analisis habis, cek token budget ---
+    # Ambil token_daily_limit — pakai kolom kalau sudah ada, fallback ke konstanta per-plan
+    token_daily_limit = getattr(quota, "token_daily_limit", None)
+    if token_daily_limit is None:
+        # Fallback: kalau kolom belum ada, pakai nilai per-plan
+        _TOKEN_PLAN_LIMITS = {
+            "free":       50_000,
+            "pro":        500_000,
+            "enterprise": 10_000_000,
         }
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=(
-                f"Kuota harian habis ({quota.daily_limit} analisis). "
-                f"Silakan {upgrade.get(user.plan, '')}."
+        plan_str = getattr(user.plan, "value", user.plan)
+        token_daily_limit = _TOKEN_PLAN_LIMITS.get(plan_str, 50_000)
+ 
+    token_used      = quota.total_tokens_used  # total kumulatif (belum ada daily token reset)
+    token_remaining = max(0, token_daily_limit - token_used)
+ 
+    if token_remaining >= TOKEN_COST_PER_ANALYSIS:
+        # Token masih cukup untuk satu analisis lagi
+        # TIDAK increment daily_used (sudah lewat limit), tapi catat di total_analyses
+        quota.total_analyses += 1
+        # Token aktual baru dikurangi setelah analisis selesai (di caller),
+        # tapi kita commit dulu supaya data konsisten
+        await db.commit()
+        return  # ✅ lanjut ke proses analisis via token budget
+ 
+    # --- Kedua limit habis ---
+    plan_str = getattr(user.plan, "value", user.plan)
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "code":    "QUOTA_EXHAUSTED",
+            "message": (
+                f"Kuota harian habis: {quota.daily_limit} analisis telah digunakan "
+                f"dan sisa token ({token_remaining:,}) tidak cukup untuk satu analisis lagi "
+                f"(butuh minimal {TOKEN_COST_PER_ANALYSIS:,} token). "
+                f"Silakan {upgrade_hint.get(plan_str, 'hubungi support')}."
             ),
-        )
-    quota.daily_used += 1
-    quota.total_analyses += 1
-    await db.commit()
+            "daily_used":        quota.daily_used,
+            "daily_limit":       quota.daily_limit,
+            "token_used":        token_used,
+            "token_daily_limit": token_daily_limit,
+            "token_remaining":   token_remaining,
+        },
+    )
 
 
 # ─────────────────────────────────────────────
@@ -149,61 +214,130 @@ def serialize_chat(chat: ChatHistory) -> dict:
 # Upload
 # ─────────────────────────────────────────────
 
+# @router.post("/upload", status_code=status.HTTP_201_CREATED)
+# async def upload_document(
+#     file: UploadFile = File(...),
+#     current_user: User = Depends(get_current_active_user),
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     if not file.filename or not file.filename.lower().endswith(".pdf"):
+#         raise HTTPException(status_code=400, detail="Hanya file PDF yang diperbolehkan.")
+
+#     content = await file.read()
+
+#     try:
+#         file_info = await pdf_extractor.save_uploaded_file(content, file.filename)
+#     except ValueError as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+
+#     doc = Document(user_id=current_user.id, status="processing", **file_info)
+#     db.add(doc)
+#     await db.commit()
+#     await db.refresh(doc)
+
+#     extraction = await asyncio.get_event_loop().run_in_executor(
+#         None, pdf_extractor.extract, file_info["file_path"]
+#     )
+
+#     if extraction.success:
+#         doc.status = "completed"
+#         doc.extracted_text = extraction.text
+#         doc.page_count = extraction.page_count
+#         doc.word_count = extraction.word_count
+#         doc.language = extraction.language
+#         doc.title = extraction.title
+#         doc.author = extraction.author
+#         doc.subject = extraction.subject
+#         doc.processed_at = datetime.now(timezone.utc)
+#     else:
+#         doc.status = "failed"
+#         doc.error_message = extraction.error
+
+#     await db.commit()
+#     await db.refresh(doc)
+
+#     quota = await get_user_quota(current_user, db)
+#     quota.storage_used_bytes += file_info["file_size_bytes"]
+#     quota.total_documents += 1
+#     quota.total_pages_processed += extraction.page_count or 0
+#     await db.commit()
+
+#     return {
+#         "message": "Dokumen berhasil diupload dan diproses.",
+#         "document": serialize_document(doc),
+#         "extraction": {
+#             "success": extraction.success,
+#             "preview": pdf_extractor.get_text_preview(extraction.text, 300),
+#             "error": extraction.error,
+#         },
+#     }
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Hanya file PDF yang diperbolehkan.")
-
+    # Validasi ekstensi — delegasi ke extractor (sudah handle semua format)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Nama file tidak valid.")
+ 
+    ext = Path(file.filename).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        from app.services.document_extractor import SUPPORTED_EXTENSIONS as SE
+        supported = ", ".join(sorted(SE.keys()))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Format '{ext}' tidak didukung. Format yang didukung: {supported}",
+        )
+ 
     content = await file.read()
-
+ 
     try:
-        file_info = await pdf_extractor.save_uploaded_file(content, file.filename)
+        file_info = await document_extractor.save_uploaded_file(content, file.filename)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
+ 
     doc = Document(user_id=current_user.id, status="processing", **file_info)
     db.add(doc)
     await db.commit()
     await db.refresh(doc)
-
+ 
+    # Ekstraksi di thread pool (blocking I/O)
     extraction = await asyncio.get_event_loop().run_in_executor(
-        None, pdf_extractor.extract, file_info["file_path"]
+        None, document_extractor.extract, file_info["file_path"]
     )
-
+ 
     if extraction.success:
-        doc.status = "completed"
+        doc.status         = "completed"
         doc.extracted_text = extraction.text
-        doc.page_count = extraction.page_count
-        doc.word_count = extraction.word_count
-        doc.language = extraction.language
-        doc.title = extraction.title
-        doc.author = extraction.author
-        doc.subject = extraction.subject
-        doc.processed_at = datetime.now(timezone.utc)
+        doc.page_count     = extraction.page_count
+        doc.word_count     = extraction.word_count
+        doc.language       = extraction.language
+        doc.title          = extraction.title
+        doc.author         = extraction.author
+        doc.subject        = extraction.subject
+        doc.processed_at   = datetime.now(timezone.utc)
     else:
-        doc.status = "failed"
+        doc.status        = "failed"
         doc.error_message = extraction.error
-
+ 
     await db.commit()
     await db.refresh(doc)
-
+ 
     quota = await get_user_quota(current_user, db)
-    quota.storage_used_bytes += file_info["file_size_bytes"]
-    quota.total_documents += 1
-    quota.total_pages_processed += extraction.page_count or 0
+    quota.storage_used_bytes    += file_info["file_size_bytes"]
+    quota.total_documents        += 1
+    quota.total_pages_processed  += extraction.page_count or 0
     await db.commit()
-
+ 
     return {
         "message": "Dokumen berhasil diupload dan diproses.",
         "document": serialize_document(doc),
         "extraction": {
-            "success": extraction.success,
-            "preview": pdf_extractor.get_text_preview(extraction.text, 300),
-            "error": extraction.error,
+            "success":   extraction.success,
+            "file_type": extraction.file_type,
+            "preview":   document_extractor.get_text_preview(extraction.text, 300),
+            "error":     extraction.error,
         },
     }
 
@@ -655,7 +789,8 @@ async def delete_document(
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
 
     # Hapus file fisik dari disk
-    await pdf_extractor.delete_file(doc.file_path)
+    # await pdf_extractor.delete_file(doc.file_path)
+    await document_extractor.delete_file(doc.file_path)
 
     doc.deleted_at = datetime.now(timezone.utc)
     await db.commit()

@@ -1,16 +1,18 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useDocumentsStore } from '../stores/documents'
 import { useChatStore } from '../stores/chat'
 import { formatRelativeTime, truncate } from '../utils/formatters'
 import DashboardLayout from '../components/layout/DashboardLayout.vue'
 import Badge from '../components/ui/Badge.vue'
+import ChatPanel from '../components/dashboard/ChatPanel.vue'
+import { AI_ASSISTANT_NAME } from '../utils/constants'
 
 const docsStore = useDocumentsStore()
 const chatStore = useChatStore()
 
 const selectedSessionId = ref(null)
-const isLoadingMessages = ref(false)
+const selectedDocumentId = ref(null)
 
 onMounted(() => {
   docsStore.fetchHistory().catch(() => { })
@@ -18,13 +20,33 @@ onMounted(() => {
 
 async function openSession(item) {
   selectedSessionId.value = item.session_id || item.id
-  isLoadingMessages.value = true
+
+  // ASUMSI: field document_id ada di item chat_sessions dari GET /documents/history.
+  // Kalau warning di bawah muncul di console, cek Network tab response history
+  // dan tambahkan key yang benar ke baris ini.
+  selectedDocumentId.value = item.document_id ?? item.documentId ?? null
+  if (!selectedDocumentId.value) {
+    console.warn('openSession: document_id tidak ditemukan pada item sesi.', item)
+  }
+
   try {
     await chatStore.loadSession(selectedSessionId.value)
-  } finally {
-    isLoadingMessages.value = false
+  } catch {
+    // error sudah di-log di store; bisa tambah toast di sini kalau perlu
   }
 }
+
+// Opsional: setelah kirim pesan lanjutan, refresh list sesi di sidebar
+// supaya preview "last_message" & "updated_at" ikut ter-update.
+// Hapus watcher ini kalau dianggap nggak perlu / bikin sidebar flicker.
+watch(
+  () => chatStore.isSending,
+  (isSending, wasSending) => {
+    if (wasSending && !isSending && selectedSessionId.value) {
+      docsStore.fetchHistory().catch(() => { })
+    }
+  }
+)
 </script>
 
 <template>
@@ -53,28 +75,37 @@ async function openSession(item) {
       </div>
 
       <!-- Selected conversation -->
-      <div class="card flex flex-col lg:col-span-2">
-        <div class="border-b border-ink/8 px-5 py-3.5">
-          <h3 class="font-display text-sm font-semibold text-ink">Percakapan</h3>
-        </div>
-        <div class="flex-1 space-y-3 overflow-y-auto p-5" style="min-height: 50vh">
-          <div v-if="!selectedSessionId" class="flex h-full items-center justify-center text-sm text-ink/40">
-            Pilih sesi chat di samping untuk melihat isi percakapan.
+      <div class="flex flex-col lg:col-span-2" style="height: 60vh">
+
+        <div v-if="!selectedSessionId" class="card flex h-full flex-col min-h-0">
+          <div class="border-b border-ink/8 px-5 py-3.5">
+            <h3 class="font-display text-sm font-semibold text-ink">Percakapan</h3>
           </div>
-          <div v-else-if="isLoadingMessages" class="flex h-full items-center justify-center text-sm text-ink/40">
+          <div class="flex flex-1 items-center justify-center text-sm text-ink/40">
+            Pilih sesi chat di samping untuk melihat dan melanjutkan percakapan.
+          </div>
+        </div>
+
+        <div v-else-if="chatStore.isLoadingMessages" class="card flex h-full flex-col min-h-0">
+          <div class="border-b border-ink/8 px-5 py-3.5">
+            <h3 class="font-display text-sm font-semibold text-ink">Percakapan</h3>
+          </div>
+          <div class="flex flex-1 items-center justify-center text-sm text-ink/40">
             Memuat percakapan…
           </div>
-          <template v-else>
-            <div v-for="msg in chatStore.messages" :key="msg.id" class="flex"
-              :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-              <div class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
-                :class="msg.role === 'user' ? 'rounded-br-sm bg-ink text-paper' : 'rounded-bl-sm bg-paper-dim text-ink/85'">
-                <p class="whitespace-pre-wrap">{{ msg.content }}</p>
-                <span class="mt-1 block text-[11px] opacity-50">{{ formatRelativeTime(msg.created_at) }}</span>
-              </div>
-            </div>
-          </template>
         </div>
+
+        <div v-else-if="!selectedDocumentId" class="card flex h-full flex-col min-h-0">
+          <div class="border-b border-ink/8 px-5 py-3.5">
+            <h3 class="font-display text-sm font-semibold text-ink">Percakapan</h3>
+          </div>
+          <div class="flex flex-1 items-center justify-center px-6 text-center text-sm text-rubric/70">
+            document_id tidak ditemukan di data sesi ini — kirim pesan lanjutan belum bisa jalan.
+            Cek response <code>GET /documents/history</code> di Network tab untuk nama field yang benar.
+          </div>
+        </div>
+
+        <ChatPanel v-else :document-id="selectedDocumentId" class="flex-1 h-full w-full min-h-0" />
       </div>
     </div>
 
@@ -97,7 +128,7 @@ async function openSession(item) {
               <td class="px-5 py-3">
                 <Badge tone="neutral">{{ item.analysis_type }}</Badge>
               </td>
-              <td class="px-5 py-3 text-ink/60">{{ item.provider || '-' }}</td>
+              <td class="px-5 py-3 text-ink/60">{{ AI_ASSISTANT_NAME }}</td>
               <td class="px-5 py-3 text-ink/55">{{ formatRelativeTime(item.created_at) }}</td>
             </tr>
           </tbody>

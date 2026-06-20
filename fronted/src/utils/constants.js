@@ -1,11 +1,21 @@
 // Batasan paket langganan. Nilai ini ditampilkan di UI (Pricing, Quota indicator,
 // validasi sebelum upload) — sesuaikan dengan logika kuota nyata di backend
 // (tabel `quotas`: daily_used, daily_limit, storage_used_bytes) bila berbeda.
+export const AI_ASSISTANT_NAME = 'EliterAi'
+export const DEFAULT_DAILY_ANALYSIS_LIMIT = 5
+export const DEFAULT_DAILY_TOKEN_LIMIT = 50000
+
+export const USER_ROLES = {
+  USER: 'user',
+  ADMIN: 'admin',
+}
+
 export const PLAN_LIMITS = {
   free: {
     label: 'Free',
     price: 0,
     dailyAnalysisLimit: 5,
+    dailyTokenLimit: 50000,
     maxPagesPerDocument: 20,
     maxFileSizeMB: 10,
     maxStorageMB: 50,
@@ -22,6 +32,7 @@ export const PLAN_LIMITS = {
     label: 'Pro',
     price: 79000,
     dailyAnalysisLimit: 50,
+    dailyTokenLimit: 500000,
     maxPagesPerDocument: 150,
     maxFileSizeMB: 50,
     maxStorageMB: 1024,
@@ -43,6 +54,7 @@ export const PLAN_LIMITS = {
     maxFileSizeMB: 200,
     maxStorageMB: 1024 * 20,
     chatMessagesPerDay: Infinity,
+    dailyTokenLimit: Infinity,
     features: [
       'Analisis dokumen tanpa batas',
       'Tanpa batas jumlah halaman',

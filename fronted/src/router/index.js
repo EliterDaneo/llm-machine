@@ -55,6 +55,12 @@ const routes = [
     path: '/:pathMatch(.*)*',
     redirect: '/',
   },
+  {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('../views/AdminUsersView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
 ]
 
 const router = createRouter({
@@ -74,6 +80,10 @@ router.beforeEach(async (to) => {
   }
   if (to.meta.guestOnly && auth.isAuthenticated) {
     return { name: 'dashboard' }
+  }
+  // di beforeEach guard yang sudah ada
+  if (to.meta.requiresAdmin && auth.user?.role !== 'admin') {
+    return next({ name: 'dashboard' })
   }
   return true
 })

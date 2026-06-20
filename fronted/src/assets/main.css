@@ -36,6 +36,20 @@
     font-family: var(--font-sans);
   }
 
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .allow-copy,
+  .allow-copy *,
+  input,
+  textarea,
+  [contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
   h1,
   h2,
   h3,

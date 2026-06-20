@@ -78,7 +78,8 @@ async function confirmDelete() {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2" style="height: calc(100vh - 320px); min-height: 480px">
+      <div class="grid grid-cols-1 grid-rows-[minmax(0,1fr)] gap-6 lg:grid-cols-2"
+        style="height: calc(100vh - 320px); min-height: 480px">
         <AnalysisPanel :document-id="doc.id" />
         <ChatPanel :document-id="doc.id" />
       </div>

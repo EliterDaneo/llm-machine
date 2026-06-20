@@ -84,16 +84,27 @@ export const useDocumentsStore = defineStore('documents', {
       }
     },
 
-    async analyzeDocument(payload) {
-      this.isAnalyzing = true
+    async uploadDocument(file) {
+      this.isUploading = true
+      this.uploadProgress = 0
       try {
-        const { data } = await documentsApi.analyze(payload)
-        const analysisObj = data.analysis ?? data
-        if (!Array.isArray(this.analyses)) this.analyses = []
-        this.analyses.unshift(analysisObj)
-        return analysisObj
+        const { data } = await documentsApi.upload(file, (evt) => {
+          if (evt.total) {
+            this.uploadProgress = Math.round((evt.loaded / evt.total) * 100)
+          }
+        })
+
+        // Backend return: { message, document: {...}, extraction: {...} }
+        // Ambil nested .document kalau ada, fallback ke data langsung
+        const doc = data?.document ?? data
+
+        if (!Array.isArray(this.documents)) this.documents = []
+        this.documents.unshift(doc)
+
+        return doc  // UploadZone.vue pakai return value ini untuk cek page_count
       } finally {
-        this.isAnalyzing = false
+        this.isUploading = false
+        this.uploadProgress = 0
       }
     },
 

@@ -3,6 +3,7 @@ import { ref, nextTick, watch } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { useToast } from '../../composables/useToast'
 import { formatRelativeTime } from '../../utils/formatters'
+import { AI_ASSISTANT_NAME } from '../../utils/constants'
 
 const props = defineProps({
   documentId: { type: [String, Number], required: true },
@@ -50,7 +51,7 @@ async function react(msg, feedback) {
       <p class="text-xs text-ink/45">Tanyakan apa pun tentang isi dokumen ini.</p>
     </div>
 
-    <div ref="scrollEl" class="flex-1 space-y-3 overflow-y-auto p-5">
+    <div ref="scrollEl" class="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
       <div v-if="!chatStore.messages.length" class="flex h-full items-center justify-center text-center">
         <p class="max-w-[220px] text-sm text-ink/40">
           Mulai percakapan — misalnya "Apa kesimpulan utama dokumen ini?"
@@ -63,7 +64,10 @@ async function react(msg, feedback) {
           ? 'rounded-br-sm bg-ink text-paper'
           : 'rounded-bl-sm bg-paper-dim text-ink/85'
           ">
-          <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+          <span v-if="msg.role === 'assistant'" class="mb-1 block text-xs font-semibold text-ink/45">
+            {{ AI_ASSISTANT_NAME }}
+          </span>
+          <p class="whitespace-pre-wrap allow-copy">{{ msg.content }}</p>
           <div class="mt-1.5 flex items-center gap-2 text-[11px] opacity-50">
             <span>{{ formatRelativeTime(msg.created_at) }}</span>
           </div>
