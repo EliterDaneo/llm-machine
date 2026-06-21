@@ -6,7 +6,6 @@ function extractList(data, keys = []) {
   for (const key of keys) {
     if (Array.isArray(data?.[key])) return data[key]
   }
-  console.warn('extractList: tidak menemukan array pada response. Keys tersedia:', data ? Object.keys(data) : data)
   return []
 }
 
@@ -18,7 +17,7 @@ export const useDocumentsStore = defineStore('documents', {
     chatSessions: [],
     analysisHistory: [],
     currentDocument: null,
-    analyses: [], // hasil analisis untuk currentDocument
+    analyses: [],
     isLoadingList: false,
     isUploading: false,
     isAnalyzing: false,
@@ -61,8 +60,10 @@ export const useDocumentsStore = defineStore('documents', {
 
     async fetchDocumentDetail(id) {
       const { data } = await documentsApi.detail(id)
+      // Backend return: { document: {...}, analyses: [...] }
       this.currentDocument = data.document ?? data
-      this.analyses = extractList(data.document ?? data, ['analyses', 'analysis_results'])
+      // Analyses ada di root data.analyses, bukan di dalam document object
+      this.analyses = extractList(data, ['analyses', 'analysis_results'])
       return this.currentDocument
     },
 
@@ -75,42 +76,40 @@ export const useDocumentsStore = defineStore('documents', {
             this.uploadProgress = Math.round((evt.loaded / evt.total) * 100)
           }
         })
-        if (!Array.isArray(this.documents)) this.documents = []
-        this.documents.unshift(data)
-        return data
-      } finally {
-        this.isUploading = false
-        this.uploadProgress = 0
-      }
-    },
-
-    async uploadDocument(file) {
-      this.isUploading = true
-      this.uploadProgress = 0
-      try {
-        const { data } = await documentsApi.upload(file, (evt) => {
-          if (evt.total) {
-            this.uploadProgress = Math.round((evt.loaded / evt.total) * 100)
-          }
-        })
-
         // Backend return: { message, document: {...}, extraction: {...} }
-        // Ambil nested .document kalau ada, fallback ke data langsung
         const doc = data?.document ?? data
 
         if (!Array.isArray(this.documents)) this.documents = []
         this.documents.unshift(doc)
 
-        return doc  // UploadZone.vue pakai return value ini untuk cek page_count
+        return doc
       } finally {
         this.isUploading = false
         this.uploadProgress = 0
       }
     },
 
+    async analyzeDocument(payload) {
+      this.isAnalyzing = true
+      try {
+        const { data } = await documentsApi.analyze(payload)
+        // Backend return: { message, analysis: {...}, quota: {...} }
+        // Jangan extractList — ini bukan array dokumen
+        const analysisObj = data?.analysis ?? data
+
+        if (!Array.isArray(this.analyses)) this.analyses = []
+        // Tambah ke depan supaya langsung muncul sebagai latest
+        this.analyses.unshift(analysisObj)
+
+        return analysisObj
+      } finally {
+        this.isAnalyzing = false
+      }
+    },
+
     async deleteDocument(id) {
       await documentsApi.remove(id)
-      this.documents = (this.documents || []).filter((d) => d.id !== id)
+      this.documents = (this.documents || []).filter((d) => d.id !== id && d.uuid !== id)
     },
   },
 })

@@ -63,9 +63,9 @@ watch(
             :class="selectedSessionId === (item.session_id || item.id) ? 'bg-highlight-soft' : ''"
             @click="openSession(item)">
             <span class="truncate text-sm font-medium text-ink">{{ item.document_filename || item.filename || 'Dokumen'
-              }}</span>
+            }}</span>
             <span class="truncate text-xs text-ink/45">{{ truncate(item.last_message || item.preview || '', 60)
-              }}</span>
+            }}</span>
             <span class="text-[11px] text-ink/35">{{ formatRelativeTime(item.updated_at || item.created_at) }}</span>
           </button>
           <div v-if="!docsStore.chatSessions.length" class="px-4 py-10 text-center text-sm text-ink/40">
@@ -113,26 +113,28 @@ watch(
     <div v-if="docsStore.analysisHistory.length" class="mt-8">
       <h2 class="mb-3 font-display text-lg font-semibold text-ink">Riwayat Analisis</h2>
       <div class="card overflow-hidden">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-ink/8 bg-paper-dim/60 text-xs uppercase tracking-wide text-ink/45">
-            <tr>
-              <th class="px-5 py-3 font-semibold">Dokumen</th>
-              <th class="px-5 py-3 font-semibold">Jenis</th>
-              <th class="px-5 py-3 font-semibold">Provider</th>
-              <th class="px-5 py-3 font-semibold">Waktu</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in docsStore.analysisHistory" :key="item.id" class="border-b border-ink/6 last:border-0">
-              <td class="px-5 py-3 text-ink">{{ item.document_filename || item.filename }}</td>
-              <td class="px-5 py-3">
-                <Badge tone="neutral">{{ item.analysis_type }}</Badge>
-              </td>
-              <td class="px-5 py-3 text-ink/60">{{ AI_ASSISTANT_NAME }}</td>
-              <td class="px-5 py-3 text-ink/55">{{ formatRelativeTime(item.created_at) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="overflow-x-auto">
+          <table class="min-w-[800px] w-full text-left text-sm">
+            <thead class="border-b border-ink/8 bg-paper-dim/60 text-xs uppercase tracking-wide text-ink/45">
+              <tr>
+                <th class="px-5 py-3 font-semibold">Dokumen</th>
+                <th class="px-5 py-3 font-semibold">Jenis</th>
+                <th class="px-5 py-3 font-semibold">Provider</th>
+                <th class="px-5 py-3 font-semibold">Waktu</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in docsStore.analysisHistory" :key="item.id" class="border-b border-ink/6 last:border-0">
+                <td class="px-5 py-3 text-ink">{{ item.document_filename || item.filename }}</td>
+                <td class="px-5 py-3">
+                  <Badge tone="neutral">{{ item.analysis_type }}</Badge>
+                </td>
+                <td class="px-5 py-3 text-ink/60">{{ AI_ASSISTANT_NAME }}</td>
+                <td class="px-5 py-3 text-ink/55">{{ formatRelativeTime(item.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </DashboardLayout>
